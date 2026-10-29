@@ -1,0 +1,51 @@
+# T005: configuration only. Add/validate the T006 bootstrap before first startup.
+name: coti-ai-atendimento
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.0-pg16@sha256:a132765ec351c65111b5b675928a3a0515a466a40f97277329db8b8209ad8bc9
+    restart: unless-stopped
+    environment:
+      # Bootstrap administrator only; runtime/migration identities belong to T006.
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB no ambiente local}
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER no ambiente local}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no ambiente local}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - target: 5432
+        published: "5435"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - knowledge-data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -p 5432 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    cpus: 1.0
+    mem_limit: 1g
+    pids_limit: 128
+    shm_size: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres-data:
+
+networks:
+  # Only postgres and api-conhecimento may join this network.
+  knowledge-data:
+    driver: bridge
+    internal: true
+  # Reserved for MCP traffic when both API services are introduced in T017.
+  # postgres must not join it; api-atendimentos must not join knowledge-data.
+  service-integration:
+    driver: bridge
